@@ -310,3 +310,8 @@ dist
 cypress/videos
 cypress/screenshots
 .vscode/settings.json
+
+# BearingNode internal collaboration tracking
+# This submodule contains proprietary strategy, notes, and internal planning
+# for BearingNode's contributions to Open WebUI
+openwebui-collaboration/

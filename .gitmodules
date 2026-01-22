@@ -1,0 +1,3 @@
+[submodule "openwebui-collaboration"]
+	path = openwebui-collaboration
+	url = https://github.com/BearingNode/openwebui-collaboration.git
