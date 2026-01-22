@@ -200,7 +200,7 @@ def create_token(data: dict, expires_delta: Union[timedelta, None] = None) -> st
             "iss": str(WEBUI_URL),  # Issuer - identifies token source
             "aud": str(WEBUI_URL),  # Audience - intended recipient
             "sub": data.get("id"),  # Subject - standard user identifier
-            "iat": datetime.now(UTC),  # Issued at - token creation timestamp
+            "iat": int(datetime.now(UTC).timestamp()),  # Issued at - token creation timestamp
         }
     )
 
