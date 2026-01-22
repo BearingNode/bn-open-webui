@@ -217,9 +217,19 @@ def create_token(data: dict, expires_delta: Union[timedelta, None] = None) -> st
 
 def decode_token(token: str) -> Optional[dict]:
     try:
-        decoded = jwt.decode(token, SESSION_SECRET, algorithms=[ALGORITHM])
+        # Disable audience/issuer verification for backward compatibility
+        # The iss/aud claims are present for MCP Gateway compatibility,
+        # but Open WebUI doesn't validate them (yet)
+        decoded = jwt.decode(
+            token,
+            SESSION_SECRET,
+            algorithms=[ALGORITHM],
+            options={"verify_aud": False, "verify_iss": False},
+        )
+        log.debug(f"Token decoded successfully: {decoded.get('id')}")
         return decoded
-    except Exception:
+    except Exception as e:
+        log.error(f"Token decode failed: {e}")
         return None
 
 
@@ -322,7 +332,16 @@ async def get_current_user(
     try:
         try:
             data = decode_token(token)
+            if data is None:
+                log.error(f"decode_token returned None for token")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token decode failed",
+                )
+        except HTTPException:
+            raise
         except Exception as e:
+            log.error(f"Exception in decode_token: {e}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token",
