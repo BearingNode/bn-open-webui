@@ -42,9 +42,10 @@ from open_webui.env import (
     WEBUI_AUTH_TRUSTED_EMAIL_HEADER,
 )
 
+from open_webui.config import WEBUI_URL
+
 from fastapi import BackgroundTasks, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
 
 log = logging.getLogger(__name__)
 
@@ -192,6 +193,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_token(data: dict, expires_delta: Union[timedelta, None] = None) -> str:
     payload = data.copy()
+
+    # Add standard OAuth 2.0/OIDC claims for improved interoperability
+    payload.update(
+        {
+            "iss": str(WEBUI_URL),  # Issuer - identifies token source
+            "aud": str(WEBUI_URL),  # Audience - intended recipient
+            "sub": data.get("id"),  # Subject - standard user identifier
+            "iat": datetime.now(UTC),  # Issued at - token creation timestamp
+        }
+    )
 
     if expires_delta:
         expire = datetime.now(UTC) + expires_delta
