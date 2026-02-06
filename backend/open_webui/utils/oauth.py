@@ -1621,6 +1621,7 @@ class OAuthManager:
                 data={"id": user.id},
                 expires_delta=parse_duration(auth_manager_config.JWT_EXPIRES_IN),
             )
+
             if (
                 auth_manager_config.ENABLE_OAUTH_GROUP_MANAGEMENT
                 and user.role != "admin"
@@ -1649,6 +1650,12 @@ class OAuthManager:
             redirect_url = f"{redirect_url}?error={error_message}"
             return RedirectResponse(url=redirect_url, headers=response.headers)
 
+        # Derive cookie max_age from JWT expiry so cookies persist across
+        # browser restarts. Without this, session cookies are destroyed on
+        # close, orphaning valid refresh tokens in the DB.
+        _jwt_duration = parse_duration(auth_manager_config.JWT_EXPIRES_IN)
+        cookie_max_age = int(_jwt_duration.total_seconds()) if _jwt_duration else None
+
         response = RedirectResponse(url=redirect_url, headers=response.headers)
 
         # Set the cookie token
@@ -1659,6 +1666,7 @@ class OAuthManager:
             httponly=False,  # Required for frontend access
             samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
             secure=WEBUI_AUTH_COOKIE_SECURE,
+            max_age=cookie_max_age,
         )
 
         # Legacy cookies for compatibility with older frontend versions
@@ -1669,6 +1677,7 @@ class OAuthManager:
                 httponly=True,
                 samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
                 secure=WEBUI_AUTH_COOKIE_SECURE,
+                max_age=cookie_max_age,
             )
 
         try:
@@ -1698,6 +1707,7 @@ class OAuthManager:
                 httponly=True,
                 samesite=WEBUI_AUTH_COOKIE_SAME_SITE,
                 secure=WEBUI_AUTH_COOKIE_SECURE,
+                max_age=cookie_max_age,
             )
 
             log.info(
