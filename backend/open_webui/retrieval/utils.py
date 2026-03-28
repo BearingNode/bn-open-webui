@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 import re
 
+from opentelemetry import trace
 from urllib.parse import quote
 from huggingface_hub import snapshot_download
 from langchain_classic.retrievers import (
@@ -52,6 +53,8 @@ from open_webui.config import (
 )
 
 log = logging.getLogger(__name__)
+
+_tracer = trace.get_tracer(__name__)
 
 
 from typing import Any
@@ -799,17 +802,34 @@ def get_embedding_function(
     if embedding_engine == "":
         # Sentence transformers: CPU-bound sync operation
         async def async_embedding_function(query, prefix=None, user=None):
-            return await asyncio.to_thread(
-                (
-                    lambda query, prefix=None: embedding_function.encode(
-                        query,
-                        batch_size=int(embedding_batch_size),
-                        **({"prompt": prefix} if prefix else {}),
-                    ).tolist()
-                ),
-                query,
-                prefix,
-            )
+            input_count = len(query) if isinstance(query, list) else 1
+            with _tracer.start_as_current_span(
+                "embedding.generate",
+                attributes={
+                    "embedding.model": embedding_model,
+                    "embedding.engine": "sentence-transformers",
+                    "embedding.batch_size": int(embedding_batch_size),
+                    "embedding.input_count": input_count,
+                },
+            ) as span:
+                result = await asyncio.to_thread(
+                    (
+                        lambda query, prefix=None: embedding_function.encode(
+                            query,
+                            batch_size=int(embedding_batch_size),
+                            **({"prompt": prefix} if prefix else {}),
+                        ).tolist()
+                    ),
+                    query,
+                    prefix,
+                )
+                if span.is_recording() and result:
+                    first = result[0] if isinstance(result[0], list) else result
+                    span.set_attribute(
+                        "embedding.output_dimensions",
+                        len(first) if isinstance(first, list) else len(result),
+                    )
+                return result
 
         return async_embedding_function
     elif embedding_engine in ["ollama", "openai", "azure_openai"]:
