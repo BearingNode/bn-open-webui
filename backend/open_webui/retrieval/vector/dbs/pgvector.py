@@ -50,6 +50,7 @@ from open_webui.config import (
     PGVECTOR_IVFFLAT_LISTS,
     PGVECTOR_USE_HALFVEC,
 )
+from open_webui.env import ENABLE_OTEL_TRACES
 
 
 VECTOR_LENGTH = PGVECTOR_INITIALIZE_MAX_VECTOR_LENGTH
@@ -111,6 +112,13 @@ class PgvectorClient(VectorDBBase):
                     )
             else:
                 engine = create_engine(PGVECTOR_DB_URL, pool_pre_ping=True)
+
+            if ENABLE_OTEL_TRACES:
+                from opentelemetry.instrumentation.sqlalchemy import (
+                    SQLAlchemyInstrumentor,
+                )
+
+                SQLAlchemyInstrumentor().instrument(engine=engine)
 
             SessionLocal = sessionmaker(
                 autocommit=False, autoflush=False, bind=engine, expire_on_commit=False
