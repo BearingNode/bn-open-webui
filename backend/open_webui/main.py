@@ -2721,6 +2721,25 @@ async def register_client(request, client_id: str) -> bool:
         log.error(f'OAuth client re-registration failed for {client_id}: {e}')
         return False
 
+    # jana#112 fix: don't persist a rebuilt blob that is no more usable than
+    # what it's replacing. register_client()'s discovery-based rebuild has no
+    # way to resolve real endpoints for a provider without RFC 8414/9728
+    # discovery (e.g. GitHub), so on such providers it silently produces a
+    # null-metadata blob every time — and used to write that over production
+    # config on every failed attempt (see Status/RCA/INVESTIGATION-112-authorize-500.md
+    # §1.2). Only persist when the rebuild actually has a resolvable endpoint.
+    has_resolvable_endpoint = bool(oauth_client_info.issuer) or bool(
+        oauth_client_info.server_metadata
+        and getattr(oauth_client_info.server_metadata, 'authorization_endpoint', None)
+    )
+    if not has_resolvable_endpoint:
+        log.error(
+            f'OAuth client re-registration for {client_id} produced no resolvable '
+            f'authorize endpoint (no discovery metadata found); leaving stored '
+            f'config unchanged rather than persisting a still-broken blob'
+        )
+        return False
+
     try:
         connections = request.app.state.config.TOOL_SERVER_CONNECTIONS
         connections[connection_idx] = {

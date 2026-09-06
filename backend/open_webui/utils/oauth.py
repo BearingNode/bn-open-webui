@@ -640,6 +640,29 @@ class OAuthClientManager:
             'server_metadata_url': (oauth_client_info.issuer if oauth_client_info.issuer else None),
         }
 
+        # jana#112 fix: providers that don't support RFC 8414/9728 discovery
+        # (e.g. GitHub OAuth Apps) can never populate `issuer` with a real
+        # metadata document URL, so server_metadata_url above is always None
+        # for them — and Authlib has no other source for authorize_url/
+        # access_token_url, raising `RuntimeError: Missing "authorize_url"
+        # value` on first use (see Status/RCA/INVESTIGATION-112-authorize-500.md).
+        # When the static blob carries explicit endpoints in server_metadata
+        # (built by the caller specifically because discovery isn't available)
+        # and there is no real discovery URL to prefer, pass them straight to
+        # Authlib — the same direct-kwarg pattern open_webui/config.py's native
+        # github_oauth_register() already uses successfully for SSO login.
+        if not kwargs['server_metadata_url'] and oauth_client_info.server_metadata:
+            authorize_url = getattr(oauth_client_info.server_metadata, 'authorization_endpoint', None)
+            access_token_url = getattr(oauth_client_info.server_metadata, 'token_endpoint', None)
+            # These are pydantic Url objects (e.g. AnyHttpUrl), not str — Authlib
+            # expects plain strings for authorize_url/access_token_url.
+            authorize_url = str(authorize_url) if authorize_url else None
+            access_token_url = str(access_token_url) if access_token_url else None
+            if authorize_url:
+                kwargs['authorize_url'] = authorize_url
+            if access_token_url:
+                kwargs['access_token_url'] = access_token_url
+
         # Default to S256 for OAuth 2.1 (PKCE is mandatory per RFC 9700)
         kwargs['code_challenge_method'] = 'S256'
 
